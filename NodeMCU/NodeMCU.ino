@@ -82,12 +82,9 @@ void saveData(String e) {
 
 void setup()
 {
-  Serial.begin(9600);
+  Serial.begin(115200);
   Serial.println("Starting...");
 
-  // init
-  pinMode(D0, INPUT);
-  pinMode(D1, OUTPUT);
   NodeSerial.begin(115200);
 
   // init WIFI
@@ -108,20 +105,20 @@ void setup()
 void loop() {
   while (NodeSerial.available()) {
     String data_str = NodeSerial.readString();
+    Serial.print("[NodeMCU] Receive data: ");
+    Serial.print(data_str);
+    Serial.println("");
     if (data_str.startsWith("[")) {
-      Serial.print("[NodeMCU] Receive data: ");
-      Serial.print(data_str);
-      Serial.println("");
       saveData(data_str);
     }
   }
 
   while (Serial.available()) {
     String data_str = Serial.readString();
+    Serial.print("[NodeMCU] Receive data: ");
+    Serial.print(data_str);
+    Serial.println("");
     if (data_str.startsWith("[")) {
-      Serial.print("[NodeMCU] Receive data: ");
-      Serial.print(data_str);
-      Serial.println("");
       saveData(data_str);
     }
   }
