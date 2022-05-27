@@ -13,6 +13,10 @@
 
 SoftwareSerial NodeSerial(D0, D1); // RX | TX
 
+// PM2.5 Sensor PIN
+int PMMeasurePin = A0;
+int PMLedPowerPin = D2;
+
 // WIFI
 const char* ap_name = "ESP8266-Safely-Live-Your-Life-AP";
 
@@ -22,9 +26,6 @@ const int mqtt_port = 1883;
 const char* mqtt_Client = "a8dfc6a7-1799-46a1-b799-55735a2003ff";
 const char* mqtt_username = "hM5wWXzpJjzEmp42M4FKcYbjWw7hqfaX";
 const char* mqtt_password = "3ThdRrqDFw5nrm4WH*OmsDhxNMJJiUxP";
-
-unsigned long previousMillis = 0;
-const long interval = 1000;
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
@@ -60,7 +61,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   if (String(topic) == "") {}
 }
 
-void sendDataToNetPie(StaticJsonDocument<200> data) {
+void uploadDataToNetPie(StaticJsonDocument<200> data) {
   char buffer[256];
   if (mqttClient.connected()) {
     mqttClient.loop();
@@ -77,7 +78,22 @@ void saveData(String e) {
   data["temp"] = temp[0];
   data["humi"] = temp[1];
   data["lumi"] = temp[2];
-  data["pm"] = temp[3];
+  //  data["pm"] = temp[3];
+}
+
+float getDustDensity() {
+  digitalWrite(PMLedPowerPin, LOW);
+  delayMicroseconds(280);
+  float voMeasured = analogRead(PMMeasurePin); // 0-1023
+  delayMicroseconds(40);
+  digitalWrite(PMLedPowerPin, HIGH);
+  delayMicroseconds(9680);
+
+  float calcVoltage = voMeasured * (3.3 / 1024); // 0.0-3.3
+
+  float dustDensity = 0.17 * calcVoltage - 0.1;
+
+  return dustDensity;
 }
 
 void setup()
@@ -86,6 +102,9 @@ void setup()
   Serial.println("Starting...");
 
   NodeSerial.begin(115200);
+
+  // init PM sensor
+  pinMode(PMLedPowerPin,OUTPUT);
 
   // init WIFI
   WiFiManager wifiManager;
@@ -102,8 +121,15 @@ void setup()
   mqttClient.setCallback(callback);
 }
 
+
+unsigned long uploadDataPreviousMillis = 0;
+const long uploadDataInterval = 1000;
+
+unsigned long readPMPreviousMillis = 0;
+const long readPMInterval = 1000;
+
 void loop() {
-  while (NodeSerial.available()) {
+  if (NodeSerial.available()) {
     String data_str = NodeSerial.readString();
     Serial.print("[NodeMCU] Receive data: ");
     Serial.print(data_str);
@@ -113,7 +139,7 @@ void loop() {
     }
   }
 
-  while (Serial.available()) {
+  if (Serial.available()) {
     String data_str = Serial.readString();
     Serial.print("[NodeMCU] Receive data: ");
     Serial.print(data_str);
@@ -124,8 +150,14 @@ void loop() {
   }
 
   unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis >= interval) {
-    previousMillis = currentMillis;
-    sendDataToNetPie(data);
+  if (currentMillis - uploadDataPreviousMillis >= uploadDataInterval) {
+    uploadDataPreviousMillis = currentMillis;
+    uploadDataToNetPie(data);
+  }
+
+  if (currentMillis - readPMPreviousMillis >= readPMInterval) {
+    readPMPreviousMillis = currentMillis;
+    float dustDensity = getDustDensity();
+    data["pm"] = dustDensity;
   }
 }
